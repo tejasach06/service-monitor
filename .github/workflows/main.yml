@@ -1,0 +1,44 @@
+name: Release Go Binary
+
+# Trigger this workflow on every push to main
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Checkout your code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2) Set Git user so commits are attributed to the bot
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 3) Build your Go binary inside Docker
+      - name: Build binary in Docker
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/app" \
+            -w "/app" \
+            golang:1.20 \
+            bash -lc "go env -w GOPROXY=https://proxy.golang.org && \
+                      go build -ldflags='-s -w' -o release/${{ github.repository }}-$(git rev-parse --short HEAD) ./..."
+
+      # 4) Commit the new/updated binary back to your repo
+      - name: Commit release binary
+        run: |
+          git add release/
+          git diff --quiet || git commit -m "chore: add release binary for ${{ github.sha }}"
+
+      # 5) Push the commit
+      - name: Push changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
