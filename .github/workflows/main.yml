@@ -1,6 +1,5 @@
 name: Release Go Binary
 
-# Trigger this workflow on every push to main
 on:
   push:
     branches:
@@ -11,34 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Checkout your code
+      # 1. Checkout your code
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2) Set Git user so commits are attributed to the bot
-      - name: Configure Git
+      # 2. Extract Go version from go.mod (e.g., 1.22)
+      - name: Read Go version from go.mod
+        id: goversion
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          VERSION=$(grep '^go [0-9]\+\.[0-9]\+' go.mod | awk '{print $2}' | cut -d. -f1,2)
+          echo "GO_VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      # 3) Build your Go binary inside Docker
+      # 3. Create release dir (if needed)
+      - name: Ensure release directory exists
+        run: mkdir -p release
+
+      # 4. Build using Docker with dynamic Go version
       - name: Build binary in Docker
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/app" \
             -w "/app" \
-            golang:1.20 \
+            golang:${{ steps.goversion.outputs.GO_VERSION }} \
             sh -c "go env -w GOPROXY=https://proxy.golang.org && \
-                  go build -ldflags='-s -w' -o release/${{ github.repository }}-$(git rev-parse --short HEAD) ./..."
+                   go build -ldflags='-s -w' -o release/${{ github.repository }}-$(git rev-parse --short HEAD) ./..."
 
+      # 5. Configure Git
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # 4) Commit the new/updated binary back to your repo
+      # 6. Commit the compiled binary (if changed)
       - name: Commit release binary
         run: |
           git add release/
           git diff --quiet || git commit -m "chore: add release binary for ${{ github.sha }}"
 
-      # 5) Push the commit
+      # 7. Push the commit
       - name: Push changes
         uses: ad-m/github-push-action@v0.6.0
         with:
