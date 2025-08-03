@@ -33,7 +33,8 @@ jobs:
             -w "/app" \
             golang:${{ steps.goversion.outputs.GO_VERSION }} \
             sh -c "go env -w GOPROXY=https://proxy.golang.org && \
-                   go build -ldflags='-s -w' -o release/${{ github.repository }}-$(git rev-parse --short HEAD) ./..."
+                  go build -buildvcs=false -ldflags='-s -w' -o release/${{ github.repository }}-$(git rev-parse --short HEAD) ./..."
+
 
       # 5. Configure Git
       - name: Configure Git
