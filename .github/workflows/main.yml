@@ -1,4 +1,4 @@
-name: Release Go Binary
+name: Build and Release Go Binary
 
 on:
   push:
@@ -8,28 +8,43 @@ on:
 permissions:
   contents: write
 
-
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout your code
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Extract Go version from go.mod (e.g., 1.22)
       - name: Read Go version from go.mod
         id: goversion
         run: |
           VERSION=$(grep '^go [0-9]\+\.[0-9]\+' go.mod | awk '{print $2}' | cut -d. -f1,2)
           echo "GO_VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      # 3. Create release dir (if needed)
-      - name: Ensure release directory exists
+      - name: Set dynamic tag
+        id: tag
+        run: |
+          latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n 1)
+          if [[ -z "$latest_tag" ]]; then
+            new_tag="v1.0.0"
+          else
+            major=$(echo $latest_tag | cut -d. -f1 | tr -d v)
+            minor=$(echo $latest_tag | cut -d. -f2)
+            patch=$(echo $latest_tag | cut -d. -f3)
+            new_patch=$((patch + 1))
+            new_tag="v${major}.${minor}.${new_patch}"
+          fi
+
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$new_tag"
+          git push origin "$new_tag"
+
+      - name: Create release directory
         run: mkdir -p release
 
-      # 4. Build using Docker with dynamic Go version
       - name: Build binary in Docker
         run: |
           docker run --rm \
@@ -37,23 +52,12 @@ jobs:
             -w "/app" \
             golang:${{ steps.goversion.outputs.GO_VERSION }} \
             sh -c "go env -w GOPROXY=https://proxy.golang.org && \
-                  go build -buildvcs=false -ldflags='-s -w' -o release/service-monitor-$(git rev-parse --short HEAD) ./cmd/monitor"
+                   go build -buildvcs=false -ldflags='-s -w' -o release/service-monitor ./cmd/monitor"
 
-
-      # 5. Configure Git
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      # 6. Commit the compiled binary (if changed)
-      - name: Commit release binary
-        run: |
-          git add release/
-          git diff --quiet || git commit -m "chore: add release binary for ${{ github.sha }}"
-
-      # 7. Push the commit
-      - name: Push changes
-        uses: ad-m/github-push-action@v0.6.0
+      - name: Upload binary to GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.tag.outputs.new_tag }}
+          files: release/service-monitor
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
