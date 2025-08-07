@@ -16,13 +16,10 @@ const exampleConfigYAML = `# Example service-monitor config.yaml
 services:
   AppDashboard:
     - port: 8080
-      path: /
   AdminPanel:
     - port: 9090
-      path: /login
   SecureLogsViewer:
     - port: 8443
-      path: /esp
 
 hosts:
   - ip: "192.168.1.10"
@@ -40,6 +37,12 @@ mentions:
 
 check_interval_seconds: 30
 timeout_seconds: 5
+
+retry_count: 3
+retry_delay_seconds: 2
+alert_delay_2_minutes: 10
+alert_delay_3_plus_minutes: 30
+
 `
 
 // ✅ LoadConfig reads and parses the config YAML file.
