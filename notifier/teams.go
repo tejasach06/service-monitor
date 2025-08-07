@@ -11,17 +11,31 @@ import (
 	"service-monitor/models"
 )
 
-func SendTeamsNotification(webhookURL, serviceName, hostIP string, port int, status string, protocol string, mentions []models.MentionUser) error {
+// SendTeamsNotification sends a notification to a Teams webhook.
+// alertCount: 1 for first alert, 2 for second reminder, 3+ for third and subsequent reminders.
+func SendTeamsNotification(webhookURL, serviceName, hostIP string, port int, status string, protocol string, mentions []models.MentionUser, alertCount int) error {
 	if webhookURL == "" {
 		log.Println("⚠️ Teams webhook URL not configured, skipping notification")
 		return nil
 	}
 
-	// 📌 Status Info
+	// Determine emoji and reminder tag based on alertCount and status
 	emoji := "✅"
+	reminderTag := ""
 	displayStatus := "UP"
+
 	if status == "DOWN" {
-		emoji = "🔴"
+		switch alertCount {
+		case 1:
+			emoji = "🔥"
+			reminderTag = ""
+		case 2:
+			emoji = "🔔" // Bell emoji for second alert
+			reminderTag = "**🔔 Reminder:** "
+		default:
+			emoji = "🚨" // Police car light for 3rd+ alert
+			reminderTag = "**🚨 Final Reminder:** "
+		}
 		displayStatus = "DOWN"
 	}
 
@@ -42,21 +56,60 @@ func SendTeamsNotification(webhookURL, serviceName, hostIP string, port int, sta
 		})
 	}
 
-	// 💬 Teams card body
-	cardMsg := fmt.Sprintf(
-		"%s **%s** is now **%s**\n\n> **Host**: `%s`\n\n> **Port**: `%d`\n\n> **Protocol**: `%s`\n\n%s",
-		emoji, serviceName, displayStatus, hostIP, port, protocol, mentionText,
-	)
-
-	// 👤 Adaptive Card Payload
+	// 👤 Adaptive Card Payload - Modern design
 	cardContent := map[string]interface{}{
 		"type":    "AdaptiveCard",
-		"version": "1.0",
+		"version": "1.4",
+		"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
 		"body": []map[string]interface{}{
 			{
-				"type": "TextBlock",
-				"text": cardMsg,
-				"wrap": true,
+				"type": "ColumnSet",
+				"columns": []map[string]interface{}{
+					{
+						"type":  "Column",
+						"width": "auto",
+						"items": []map[string]interface{}{
+							{
+								"type":                "TextBlock",
+								"text":                emoji,
+								"size":                "ExtraLarge",
+								"weight":              "Bolder",
+								"horizontalAlignment": "Center",
+								"spacing":             "None",
+							},
+						},
+					},
+					{
+						"type":  "Column",
+						"width": "stretch",
+						"items": []map[string]interface{}{
+							{
+								"type":    "TextBlock",
+								"text":    fmt.Sprintf("%s%s is now **%s**", reminderTag, serviceName, displayStatus),
+								"weight":  "Bolder",
+								"size":    "Medium",
+								"wrap":    true,
+								"spacing": "None",
+							},
+							{
+								"type": "FactSet",
+								"facts": []map[string]string{
+									{"title": "Host:", "value": hostIP},
+									{"title": "Port:", "value": fmt.Sprintf("%d", port)},
+									{"title": "Protocol:", "value": protocol},
+								},
+								"spacing": "Small",
+							},
+						},
+					},
+				},
+				"spacing": "Medium",
+			},
+			{
+				"type":    "TextBlock",
+				"text":    mentionText,
+				"wrap":    true,
+				"spacing": "Medium",
 			},
 		},
 		"msteams": map[string]interface{}{

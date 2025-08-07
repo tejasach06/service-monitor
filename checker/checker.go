@@ -1,47 +1,32 @@
 package checker
 
 import (
-	"crypto/tls"
 	"fmt"
-	"net/http"
-	"strings"
+	"net"
 	"time"
 )
 
-func sanitizePath(p string) string {
-	if p == "" {
-		return "/"
+// CheckPortUsingTCP tries to connect using TCP (net.DialTimeout instead of nc)
+func CheckPortUsingTCP(host string, port int, timeout time.Duration) bool {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err == nil {
+		conn.Close()
+		return true
 	}
-	if !strings.HasPrefix(p, "/") {
-		return "/" + p
-	}
-	return p
+	return false
 }
 
-func CheckService(host string, port int, path string, timeout time.Duration) (bool, string) {
-	path = sanitizePath(path)
-
-	url := fmt.Sprintf("http://%s:%d%s", host, port, path)
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(url)
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			return true, "http"
+// CheckService checks the port 3 times before returning false, with a retry delay
+func CheckService(host string, port int, retries int, retryDelay, timeout time.Duration) bool {
+	for i := 0; i < retries; i++ {
+		ok := CheckPortUsingTCP(host, port, timeout)
+		if ok {
+			return true
+		}
+		if i < retries-1 {
+			time.Sleep(retryDelay)
 		}
 	}
-
-	// HTTPS attempt
-	url = fmt.Sprintf("https://%s:%d%s", host, port, path)
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	resp, err = (&http.Client{Timeout: timeout, Transport: tr}).Get(url)
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			return true, "https"
-		}
-	}
-	return false, ""
+	return false
 }
