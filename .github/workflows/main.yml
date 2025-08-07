@@ -25,18 +25,22 @@ jobs:
       - name: Set dynamic tag
         id: tag
         run: |
+          git fetch --tags
+
           latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n 1)
+
           if [[ -z "$latest_tag" ]]; then
             new_tag="v1.0.0"
           else
-            major=$(echo $latest_tag | cut -d. -f1 | tr -d v)
-            minor=$(echo $latest_tag | cut -d. -f2)
-            patch=$(echo $latest_tag | cut -d. -f3)
+            major=$(echo "$latest_tag" | cut -d. -f1 | tr -d 'v')
+            minor=$(echo "$latest_tag" | cut -d. -f2)
+            patch=$(echo "$latest_tag" | cut -d. -f3)
             new_patch=$((patch + 1))
             new_tag="v${major}.${minor}.${new_patch}"
           fi
 
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "$new_tag"
