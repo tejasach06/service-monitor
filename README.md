@@ -67,6 +67,10 @@ Or specify a custom config path:
 
 ```
 
+### 4. CI / Release Automation
+
+Automated builds and GitHub releases trigger on push to `main` via GitHub Actions on self-hosted Linux (`vm101-service-monitor` Podman runner) using the native Go toolchain.
+
 ---
 
 ## 📝 Example Configuration (`config.yaml`)

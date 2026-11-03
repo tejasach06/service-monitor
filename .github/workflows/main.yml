@@ -4,17 +4,28 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
+    name: Build and Release Go Binary (VM101)
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, Linux, X64, vm101, podman]
+    concurrency:
+      group: vm101-service-monitor-build
+      cancel-in-progress: false
+    timeout-minutes: 15
+    env:
+      RUNNER_TOOL_CACHE: /home/runner/work/_tool
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Read Go version from go.mod
         id: goversion
@@ -46,20 +57,22 @@ jobs:
           git tag "$new_tag"
           git push origin "$new_tag"
 
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ steps.goversion.outputs.GO_VERSION }}
+          cache: false
+
       - name: Create release directory
         run: mkdir -p release
 
-      - name: Build binary in Docker
+      - name: Build binary
         run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/app" \
-            -w "/app" \
-            golang:${{ steps.goversion.outputs.GO_VERSION }} \
-            sh -c "go env -w GOPROXY=https://proxy.golang.org && \
-                   go build -buildvcs=false -ldflags='-s -w' -o release/service-monitor ./cmd/monitor"
+          go env -w GOPROXY=https://proxy.golang.org
+          go build -buildvcs=false -ldflags='-s -w' -o release/service-monitor ./cmd/monitor
 
       - name: Upload binary to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.new_tag }}
           files: release/service-monitor
